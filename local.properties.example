@@ -1,0 +1,2 @@
+# Opsional: override URL Worker default untuk pengembangan lokal.
+MIDTRANS_BACKEND_URL=https://gowin-midtrans.gowin-ahmadhaqinn.workers.dev

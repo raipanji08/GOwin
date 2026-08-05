@@ -1,0 +1,316 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasOnly([
+          "id",
+          "from",
+          "to",
+          "time",
+          "price",
+          "vehicleName"
+        ])
+        && data.from is string
+        && data.from.size() > 0
+        && data.from.size() <= 60
+        && data.to is string
+        && data.to.size() > 0
+        && data.to.size() <= 60
+        && data.from != data.to
+        && data.time is string
+        && data.time.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && data.price is int
+        && data.price > 0
+        && data.price <= 100000000
+        && data.vehicleName is string
+        && data.vehicleName.size() > 0
+        && data.vehicleName.size() <= 80;
+    }
+
+    function hasValidPaymentState(data) {
+      return (
+          data.status == "pending_payment"
+          && data.paymentStatus == "pending"
+        ) || (
+          data.status == "pending_verification"
+          && data.paymentStatus == "verification"
+        ) || (
+          data.status == "paid"
+          && data.paymentStatus in ["paid", "refunded"]
+        ) || (
+          data.status == "cancelled"
+          && data.paymentStatus in ["failed", "refunded"]
+        ) || (
+          data.status == "rejected"
+          && data.paymentStatus == "failed"
+        ) || (
+          data.status == "expired"
+          && data.paymentStatus == "expired"
+        );
+    }
+
+    match /admins/{userId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+      allow write: if false;
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidSchedule(request.resource.data);
+      allow update: if isAdmin() && isValidSchedule(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn()
+        && (
+          request.resource.data.userId == request.auth.uid
+          || isAdmin()
+        )
+        && request.resource.data.keys().hasAll([
+          "id",
+          "bookingCode",
+          "userId",
+          "userName",
+          "userEmail",
+          "scheduleId",
+          "seatNumber",
+          "routeFrom",
+          "routeTo",
+          "departureTime",
+          "travelDate",
+          "ticketPrice",
+          "adminFee",
+          "totalAmount",
+          "paymentMethod",
+          "paymentStatus",
+          "status",
+          "paymentReference",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.id == bookingId
+        && request.resource.data.bookingCode is string
+        && request.resource.data.bookingCode.size() <= 40
+        && request.resource.data.userName is string
+        && request.resource.data.userName.size() <= 80
+        && (
+          request.resource.data.userEmail == request.auth.token.email
+          || isAdmin()
+        )
+        && request.resource.data.scheduleId is string
+        && request.resource.data.seatNumber is string
+        && request.resource.data.seatNumber.matches('^[A-D][1-4]$')
+        && request.resource.data.routeFrom is string
+        && request.resource.data.routeTo is string
+        && request.resource.data.departureTime is string
+        && request.resource.data.travelDate is int
+        && request.resource.data.travelDate >= request.time.toMillis() - 86400000
+        && request.resource.data.travelDate <= request.time.toMillis() + 31622400000
+        && request.resource.data.ticketPrice is int
+        && request.resource.data.ticketPrice > 0
+        && request.resource.data.paymentReference is string
+        && request.resource.data.paymentReference.size() <= 160
+        && request.resource.data.createdAt is int
+        && request.resource.data.updatedAt is int
+        && exists(
+          /databases/$(database)/documents/schedules/$(
+            request.resource.data.scheduleId
+          )
+        )
+        && request.resource.data.routeFrom == get(
+          /databases/$(database)/documents/schedules/$(
+            request.resource.data.scheduleId
+          )
+        ).data.from
+        && request.resource.data.routeTo == get(
+          /databases/$(database)/documents/schedules/$(
+            request.resource.data.scheduleId
+          )
+        ).data.to
+        && request.resource.data.departureTime == get(
+          /databases/$(database)/documents/schedules/$(
+            request.resource.data.scheduleId
+          )
+        ).data.time
+        && request.resource.data.ticketPrice == get(
+          /databases/$(database)/documents/schedules/$(
+            request.resource.data.scheduleId
+          )
+        ).data.price
+        && request.resource.data.adminFee == 2500
+        && request.resource.data.totalAmount
+          == request.resource.data.ticketPrice + request.resource.data.adminFee
+        && (
+          (
+            request.resource.data.userId == request.auth.uid
+            && request.resource.data.paymentMethod == "manual_transfer"
+            && request.resource.data.paymentStatus == "verification"
+            && request.resource.data.status == "pending_verification"
+          )
+          || (
+            isAdmin()
+            && request.resource.data.paymentMethod in [
+              "midtrans_qris",
+              "midtrans_ewallet",
+              "midtrans_virtual_account"
+            ]
+            && request.resource.data.paymentStatus == "pending"
+            && request.resource.data.status == "pending_payment"
+            && request.resource.data.paymentReference == bookingId
+          )
+        )
+        && getAfter(
+          /databases/$(database)/documents/seat_reservations/$(
+            request.resource.data.scheduleId + "_"
+              + string(request.resource.data.travelDate) + "_"
+              + request.resource.data.seatNumber
+          )
+        ).data.bookingId == bookingId
+        && (
+          !exists(
+            /databases/$(database)/documents/seat_reservations/$(
+              request.resource.data.scheduleId + "_" + request.resource.data.seatNumber
+            )
+          )
+          || isAdmin()
+        )
+        && !exists(/databases/$(database)/documents/bookings/$(bookingId));
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "paymentStatus",
+          "paymentReference",
+          "midtransTransactionId",
+          "midtransTransactionStatus",
+          "midtransQrString",
+          "midtransQrUrl",
+          "midtransDeeplinkUrl",
+          "virtualAccountNumber",
+          "virtualAccountBank",
+          "paymentExpiresAt",
+          "updatedAt"
+        ])
+        && request.resource.data.status in [
+          "pending_payment",
+          "pending_verification",
+          "paid",
+          "cancelled",
+          "rejected",
+          "expired"
+        ]
+        && request.resource.data.paymentStatus in [
+          "pending",
+          "verification",
+          "paid",
+          "failed",
+          "expired",
+          "refunded"
+        ]
+        && request.resource.data.updatedAt is int
+        && hasValidPaymentState(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /seat_reservations/{reservationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          "scheduleId",
+          "seatNumber",
+          "bookingId",
+          "userId",
+          "travelDate",
+          "createdAt"
+        ])
+        && request.resource.data.scheduleId is string
+        && request.resource.data.seatNumber is string
+        && request.resource.data.bookingId is string
+        && request.resource.data.travelDate is int
+        && (
+          request.resource.data.userId == request.auth.uid
+          || isAdmin()
+        )
+        && request.resource.data.createdAt is int
+        && reservationId == request.resource.data.scheduleId
+          + "_" + string(request.resource.data.travelDate)
+          + "_" + request.resource.data.seatNumber
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.userId == request.resource.data.userId
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.scheduleId == request.resource.data.scheduleId
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.seatNumber == request.resource.data.seatNumber
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.travelDate == request.resource.data.travelDate
+        && (
+          !exists(
+            /databases/$(database)/documents/seat_reservations/$(
+              request.resource.data.scheduleId + "_" + request.resource.data.seatNumber
+            )
+          )
+          || isAdmin()
+        )
+        && !exists(
+          /databases/$(database)/documents/seat_reservations/$(reservationId)
+        );
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /user_profiles/{userId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "userId",
+          "name",
+          "email",
+          "phone",
+          "gender",
+          "onboardingStatus",
+          "updatedAt"
+        ])
+        && request.resource.data.userId == userId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 16
+        && (
+          request.resource.data.phone == ""
+          || request.resource.data.phone.matches('^08[0-9]{8,11}$')
+        )
+        && request.resource.data.gender in ["", "male", "female"]
+        && request.resource.data.onboardingStatus in [
+          "pending",
+          "completed",
+          "skipped"
+        ]
+        && (
+          request.resource.data.name.size() >= 2
+          || request.resource.data.onboardingStatus in ["pending", "skipped"]
+        )
+        && request.resource.data.updatedAt is int;
+      allow delete: if false;
+    }
+  }
+}

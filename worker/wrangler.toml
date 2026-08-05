@@ -1,0 +1,10 @@
+name = "gowin-midtrans"
+main = "src/index.js"
+compatibility_date = "2026-07-30"
+
+[vars]
+FIREBASE_PROJECT_ID = "gowin-1f4e0"
+MIDTRANS_ENVIRONMENT = "sandbox"
+
+[observability]
+enabled = true
