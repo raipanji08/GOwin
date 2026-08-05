@@ -1,0 +1,12 @@
+{
+  "name": "gowin-firestore-rules-tests",
+  "private": true,
+  "scripts": {
+    "check": "node --check rules.test.js",
+    "test:rules": "node --test rules.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "firebase": "^12.0.0"
+  }
+}

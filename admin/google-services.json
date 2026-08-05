@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "931755912625",
+    "project_id": "gowin-1f4e0",
+    "storage_bucket": "gowin-1f4e0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931755912625:android:b87124e3b4980a8e44e190",
+        "android_client_info": {
+          "package_name": "com.panjirai0110.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9WsMbc0YbEy263l92id_LFXezQ9aprxM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931755912625:android:3936646fa254d12e44e190",
+        "android_client_info": {
+          "package_name": "com.panjirai0110.gowin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9WsMbc0YbEy263l92id_LFXezQ9aprxM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
